@@ -307,6 +307,7 @@ let orient;          // 'h' | 'v'
 let hover;           // { r, c } | null
 let tileCount;       // { red:{3,4,5}, blue:{3,4,5} }
 let history  = [];   // undo stack
+let touchPending = null; // mobile: {r,c} of first tap, awaiting confirm tap
 
 function mkTiles() { return { 3: 30, 4: 1, 5: 1 }; }
 
@@ -377,9 +378,10 @@ function undoMove() {
     board[r][c] = { color: prevColor, level: prevLevel };
   }
   tileCount[snap.color][snap.size]++;
-  cur      = snap.color;
-  selSize  = snap.size;
-  gameOver = false;
+  cur          = snap.color;
+  selSize      = snap.size;
+  gameOver     = false;
+  touchPending = null;
   document.getElementById('message').textContent = '';
   draw();
   updateUI();
@@ -527,9 +529,10 @@ function drawCell(r, c) {
 }
 
 function drawHover(r, c) {
-  const type  = placementType(r, c, selSize, orient, cur);
-  const cells = tileCells(r, c, selSize, orient);
-  const valid = !!type && cells.every(([r, c]) => inBounds(r, c));
+  const type      = placementType(r, c, selSize, orient, cur);
+  const cells     = tileCells(r, c, selSize, orient);
+  const valid     = !!type && cells.every(([r, c]) => inBounds(r, c));
+  const isPending = !!(touchPending && touchPending.r === r && touchPending.c === c);
 
   // ── 1. Cell fills ──────────────────────────────────────────────
   for (const [hr, hc] of cells) {
@@ -537,9 +540,10 @@ function drawHover(r, c) {
     const { x, y } = cellPx(hr, hc);
 
     if (valid) {
+      const alpha = isPending ? .92 : .72;
       ctx.fillStyle = cur === 'red'
-        ? (type === 'bridge' ? 'rgba(241,148,138,.72)' : 'rgba(231,76,60,.72)')
-        : (type === 'bridge' ? 'rgba(133,193,233,.72)' : 'rgba(52,152,219,.72)');
+        ? (type === 'bridge' ? `rgba(241,148,138,${alpha})` : `rgba(231,76,60,${alpha})`)
+        : (type === 'bridge' ? `rgba(133,193,233,${alpha})` : `rgba(52,152,219,${alpha})`);
       ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
     } else {
       ctx.fillStyle = 'rgba(255,50,50,.32)';
@@ -556,7 +560,7 @@ function drawHover(r, c) {
   // ── 2. Outline around the whole tile ──────────────────────────
   const ibCells = cells.filter(([r, c]) => inBounds(r, c));
   if (ibCells.length > 0) {
-    ctx.lineWidth   = 2.5;
+    ctx.lineWidth   = isPending ? 3.5 : 2.5;
     ctx.strokeStyle = valid
       ? (cur === 'red' ? 'rgba(231,76,60,1)' : 'rgba(52,152,219,1)')
       : 'rgba(255,70,70,1)';
@@ -579,34 +583,44 @@ function drawHover(r, c) {
   // ── 3. Anchor cell highlight (where cursor/finger is) ─────────
   if (inBounds(r, c)) {
     const { x, y } = cellPx(r, c);
-    // Extra white overlay
     ctx.fillStyle = 'rgba(255,255,255,.20)';
     ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
-    // Corner brackets to show anchor point
-    const b = Math.max(6, CELL * 0.18);
-    ctx.strokeStyle = 'rgba(255,255,255,.85)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(x + 4, y + 4 + b); ctx.lineTo(x + 4, y + 4); ctx.lineTo(x + 4 + b, y + 4);
-    ctx.moveTo(x + CELL - 4 - b, y + 4); ctx.lineTo(x + CELL - 4, y + 4); ctx.lineTo(x + CELL - 4, y + 4 + b);
-    ctx.stroke();
+    if (!isPending) {
+      // Corner brackets to show anchor point
+      const b = Math.max(6, CELL * 0.18);
+      ctx.strokeStyle = 'rgba(255,255,255,.85)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y + 4 + b); ctx.lineTo(x + 4, y + 4); ctx.lineTo(x + 4 + b, y + 4);
+      ctx.moveTo(x + CELL - 4 - b, y + 4); ctx.lineTo(x + CELL - 4, y + 4); ctx.lineTo(x + CELL - 4, y + 4 + b);
+      ctx.stroke();
+    }
   }
 
-  // ── 4. Bridge / out-of-bounds label ───────────────────────────
+  // ── 4. Centre label ────────────────────────────────────────────
   const mid = cells[Math.floor(cells.length / 2)];
-  if (type === 'bridge' && valid && inBounds(...mid)) {
+  if (isPending && valid && inBounds(...mid)) {
+    // "✓" confirm indicator when first tap done
     const { x, y } = cellPx(...mid);
-    ctx.font = `bold ${Math.max(9, Math.floor(CELL * 0.22))}px sans-serif`;
-    ctx.fillStyle = 'rgba(255,255,255,.9)';
+    ctx.font = `bold ${Math.max(12, Math.floor(CELL * 0.34))}px sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,1)';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('橋', x + CELL / 2, y + CELL / 2);
-  }
-  if (!valid && cells.some(([r, c]) => !inBounds(r, c)) && inBounds(...mid)) {
-    const { x, y } = cellPx(...mid);
-    ctx.font = `bold ${Math.max(8, Math.floor(CELL * 0.20))}px sans-serif`;
-    ctx.fillStyle = 'rgba(255,160,100,.95)';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('枠外', x + CELL / 2, y + CELL / 2);
+    ctx.fillText('✓', x + CELL / 2, y + CELL / 2);
+  } else {
+    if (type === 'bridge' && valid && inBounds(...mid)) {
+      const { x, y } = cellPx(...mid);
+      ctx.font = `bold ${Math.max(9, Math.floor(CELL * 0.22))}px sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,.9)';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('橋', x + CELL / 2, y + CELL / 2);
+    }
+    if (!valid && cells.some(([r, c]) => !inBounds(r, c)) && inBounds(...mid)) {
+      const { x, y } = cellPx(...mid);
+      ctx.font = `bold ${Math.max(8, Math.floor(CELL * 0.20))}px sans-serif`;
+      ctx.fillStyle = 'rgba(255,160,100,.95)';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('枠外', x + CELL / 2, y + CELL / 2);
+    }
   }
 }
 
@@ -653,6 +667,7 @@ function renderInv(color) {
     if (isActive && count > 0) {
       btn.addEventListener('click', () => {
         selSize = size;
+        touchPending = null;
         updateUI();
         draw();
       });
@@ -696,9 +711,10 @@ function initGame() {
   gameOver = false;
   selSize  = 3;
   orient   = 'h';
-  hover    = null;
-  tileCount = { red: mkTiles(), blue: mkTiles() };
-  history   = [];
+  hover        = null;
+  tileCount    = { red: mkTiles(), blue: mkTiles() };
+  history      = [];
+  touchPending = null;
 
   document.getElementById('message').textContent = '';
   document.getElementById('turn-indicator').textContent = '🔴 プレイヤー1のターン';
@@ -790,9 +806,10 @@ canvas.addEventListener('click', e => {
   handleClick(r, c);
 });
 
-// Touch
+// Touch — two-tap system: 1st tap shows preview, 2nd tap on same cell confirms
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
+  if (gameOver) return;
   const { px, py } = evPos(e);
   hover = pxCell(px, py);
   draw();
@@ -800,13 +817,38 @@ canvas.addEventListener('touchstart', e => {
 
 canvas.addEventListener('touchend', e => {
   e.preventDefault();
-  if (hover) handleClick(hover.r, hover.c);
-  hover = null;
+  if (gameOver || !hover) { hover = null; touchPending = null; draw(); return; }
+  const { r, c } = hover;
+
+  if (!inBounds(r, c)) {
+    touchPending = null; hover = null; draw(); return;
+  }
+
+  if (touchPending && touchPending.r === r && touchPending.c === c) {
+    // ── 2nd tap on same cell → confirm placement ──────────────
+    touchPending = null;
+    handleClick(r, c);
+    hover = null;
+  } else {
+    // ── 1st tap → lock preview and wait for confirm ───────────
+    if (canPlace(r, c, selSize, orient, cur)) {
+      touchPending = { r, c };
+      // Show hint in message area
+      const msgEl = document.getElementById('message');
+      if (!msgEl.className.includes('win')) {
+        msgEl.textContent = 'もう一度タップで確定';
+        msgEl.className = 'msg';
+      }
+    } else {
+      touchPending = null; // invalid cell — just show X preview
+    }
+  }
   draw();
 }, { passive: false });
 
 document.getElementById('orient-btn').addEventListener('click', () => {
   orient = orient === 'h' ? 'v' : 'h';
+  touchPending = null;
   updateUI(); draw();
 });
 
