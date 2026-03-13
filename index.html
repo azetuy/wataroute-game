@@ -340,6 +340,50 @@ function inBounds(r, c) {
   return r >= 0 && r < BSIZE && c >= 0 && c < BSIZE;
 }
 
+// ================================================================
+//  SOUND HELPERS (Web Audio API)
+// ================================================================
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playPlaceSound() {
+  // タイル配置時のパチンという音
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  
+  osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.08);
+  
+  gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+  
+  osc.start(audioCtx.currentTime);
+  osc.stop(audioCtx.currentTime + 0.08);
+}
+
+function playWinSound() {
+  // 勝利時のファンファーレ（上昇3音）
+  const notes = [523, 659, 784]; // C5, E5, G5
+  notes.forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    
+    osc.type = 'triangle';
+    const startTime = audioCtx.currentTime + i * 0.12;
+    osc.frequency.setValueAtTime(freq, startTime);
+    
+    gain.gain.setValueAtTime(0, startTime);
+    gain.gain.linearRampToValueAtTime(0.2, startTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.4);
+    
+    osc.start(startTime);
+    osc.stop(startTime + 0.4);
+  });
+}
+
 // Returns 'place'|'bridge'|false
 function placementType(r, c, size, o, color) {
   const cells = tileCells(r, c, size, o);
@@ -384,6 +428,7 @@ function doPlace(r, c, size, o, color) {
     board[tr][tc] = { color, level: newLevel };
   }
   tileCount[color][size]--;
+  playPlaceSound();
 }
 
 function undoMove() {
@@ -757,6 +802,7 @@ function handleClick(r, c) {
 
   if (checkWin(cur)) {
     gameOver = true;
+    playWinSound();  // 勝利効果音
     const w = cur === 'red' ? '🔴 プレイヤー1' : '🔵 プレイヤー2';
     document.getElementById('turn-indicator').textContent = 'ゲーム終了';
     showMsg(`${w} の勝利！🎉`, true, cur);
@@ -772,6 +818,7 @@ function handleClick(r, c) {
   // If next player has no moves, current player wins
   if (!hasAnyMove(cur)) {
     gameOver = true;
+    playWinSound();  // 勝利効果音
     const prev = cur === 'red' ? 'blue' : 'red';
     const w    = prev === 'red' ? '🔴 プレイヤー1' : '🔵 プレイヤー2';
     document.getElementById('turn-indicator').textContent = 'ゲーム終了';
