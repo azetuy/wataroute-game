@@ -343,9 +343,19 @@ function inBounds(r, c) {
 // ================================================================
 //  SOUND HELPERS (Web Audio API)
 // ================================================================
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let audioCtx = null;
+
+function ensureAudioContext() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
 
 function playPlaceSound() {
+  ensureAudioContext();
   // タイル配置時のパチンという音
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
@@ -363,6 +373,7 @@ function playPlaceSound() {
 }
 
 function playWinSound() {
+  ensureAudioContext();
   // 勝利時のファンファーレ（上昇3音）
   const notes = [523, 659, 784]; // C5, E5, G5
   notes.forEach((freq, i) => {
