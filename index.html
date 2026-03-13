@@ -347,8 +347,20 @@ function placementType(r, c, size, o, color) {
 
   const states = cells.map(([r, c]) => board[r][c]);
 
-  if (states.every(s => s.level === 0))                               return 'place';
-  if (states.every(s => s.color === color && s.level === 1))          return 'bridge';
+  // 新規配置（全セルが空）
+  if (states.every(s => s.level === 0)) return 'place';
+
+  // 橋（全セルが自分lv1）
+  if (states.every(s => s.color === color && s.level === 1)) return 'bridge';
+
+  // 橋（自分lv1と空マスが混在・相手タイルなし）
+  const hasOpponent = states.some(s => s.color !== null && s.color !== color);
+  const hasOwnLv1   = states.some(s => s.color === color && s.level === 1);
+  const allSafe     = states.every(s =>
+    s.level === 0 || (s.color === color && s.level === 1)
+  );
+  if (!hasOpponent && hasOwnLv1 && allSafe) return 'bridge';
+
   return false;
 }
 
@@ -359,14 +371,17 @@ function canPlace(r, c, size, o, color) {
 function doPlace(r, c, size, o, color) {
   const cells = tileCells(r, c, size, o);
   const type  = placementType(r, c, size, o, color);
-  const lv    = type === 'bridge' ? 2 : 1;
+  const isBridge = type === 'bridge';
   // Record snapshot for undo
   history.push({
     color, size,
     cells: cells.map(([r, c]) => ({ r, c, prevColor: board[r][c].color, prevLevel: board[r][c].level }))
   });
-  for (const [r, c] of cells) {
-    board[r][c] = { color, level: lv };
+  for (const [tr, tc] of cells) {
+    // 橋配置時: 自分lv1はlv2、空マスはlv1
+    const wasOwn = board[tr][tc].color === color && board[tr][tc].level === 1;
+    const newLevel = (isBridge && wasOwn) ? 2 : 1;
+    board[tr][tc] = { color, level: newLevel };
   }
   tileCount[color][size]--;
 }
@@ -752,6 +767,7 @@ function handleClick(r, c) {
 
   // Switch turn
   cur = cur === 'red' ? 'blue' : 'red';
+  orient = 'h';  // 新しいプレイヤーの向きを横に戻す
 
   // If next player has no moves, current player wins
   if (!hasAnyMove(cur)) {
