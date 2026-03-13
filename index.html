@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>ワタルート</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #151a30;
+      color: #e8e8e8;
+      font-family: 'Segoe UI', 'Hiragino Sans', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 10px 30px;
+      gap: 16px;
+    }
+
+    header { text-align: center; }
+
+    h1 {
+      font-size: 2rem;
+      letter-spacing: 0.12em;
+      background: linear-gradient(135deg, #e74c3c 30%, #3498db 70%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    #turn-indicator {
+      font-size: 1rem;
+      margin-top: 6px;
+      color: #aaa;
+      min-height: 1.4em;
+    }
+
+    /* ─── layout ─── */
+    #game-layout {
+      display: flex;
+      gap: 18px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    /* ─── side panels ─── */
+    .panel {
+      width: 176px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 12px;
+      padding: 14px 12px;
+      border: 2px solid rgba(255,255,255,0.07);
+      transition: border-color .3s, box-shadow .3s;
+    }
+    .panel.active-red  { border-color: #e74c3c; box-shadow: 0 0 18px rgba(231,76,60,.22); }
+    .panel.active-blue { border-color: #3498db; box-shadow: 0 0 18px rgba(52,152,219,.22); }
+
+    .panel-title    { font-weight: bold; font-size: 1rem; margin-bottom: 4px; }
+    .panel-subtitle { font-size: .73rem; color: #666; margin-bottom: 12px; }
+    #panel-red  .panel-title { color: #e74c3c; }
+    #panel-blue .panel-title { color: #3498db; }
+
+    /* tile buttons */
+    .tile-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 9px;
+      border-radius: 8px;
+      border: 2px solid transparent;
+      background: transparent;
+      color: #ddd;
+      margin-bottom: 5px;
+      transition: all .2s;
+      user-select: none;
+    }
+    .tile-btn.clickable { cursor: pointer; }
+    .tile-btn.clickable:hover { background: rgba(255,255,255,.07); }
+    .tile-btn.selected  { border-color: rgba(255,255,255,.45); background: rgba(255,255,255,.09); }
+    .tile-btn.depleted  { opacity: .28; }
+
+    .tile-pip-row { display: flex; gap: 2px; }
+    .pip {
+      width: 10px; height: 10px; border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .pip-red  { background: #e74c3c; }
+    .pip-blue { background: #3498db; }
+
+    .tile-name { font-size: .83rem; flex: 1; }
+    .tile-cnt  { font-size: .78rem; color: #777; min-width: 22px; text-align: right; }
+
+    /* ─── board area ─── */
+    #board-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 11px;
+    }
+
+    #board-canvas { display: block; border-radius: 6px; cursor: crosshair; }
+
+    #controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .ctrl-btn {
+      padding: 8px 18px;
+      border: 2px solid rgba(255,255,255,.13);
+      border-radius: 20px;
+      background: rgba(255,255,255,.05);
+      color: #ddd;
+      cursor: pointer;
+      font-size: .85rem;
+      transition: all .2s;
+    }
+    .ctrl-btn:hover { background: rgba(255,255,255,.11); border-color: rgba(255,255,255,.28); }
+    .ctrl-btn:disabled { opacity: .3; cursor: default; }
+    .ctrl-btn:disabled:hover { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.13); }
+
+    #message-area { min-height: 30px; text-align: center; }
+    .msg { font-size: .9rem; color: #888; }
+    .win-msg {
+      font-size: 1.4rem;
+      font-weight: bold;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    .win-red  { color: #e74c3c; }
+    .win-blue { color: #3498db; }
+
+    @keyframes pulse {
+      0%,100% { opacity:1; transform:scale(1); }
+      50%      { opacity:.8; transform:scale(1.04); }
+    }
+
+    /* ─── rules ─── */
+    footer {
+      max-width: 600px;
+      background: rgba(255,255,255,.04);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: .78rem;
+      color: #666;
+      line-height: 1.7;
+    }
+    footer h3 { color: #999; margin-bottom: 6px; font-size: .88rem; }
+    footer ul  { padding-left: 16px; }
+    kbd {
+      background: rgba(255,255,255,.09);
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-size: .73rem;
+      color: #bbb;
+    }
+
+    /* ─── mobile responsive ─── */
+    @media (max-width: 700px) {
+      body { padding: 10px 6px 20px; gap: 8px; }
+      h1   { font-size: 1.4rem; }
+      #turn-indicator { font-size: .85rem; margin-top: 4px; }
+
+      /* panels side-by-side at top, board full-width below */
+      #game-layout { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+      .panel {
+        flex: 1; min-width: 0;
+        order: 1;
+        padding: 8px 8px;
+        width: auto;
+      }
+      #board-area { order: 3; flex-basis: 100%; gap: 8px; }
+
+      .panel-subtitle { display: none; }
+      .panel-title    { font-size: .88rem; margin-bottom: 6px; }
+
+      /* compact tile buttons */
+      .tile-btn  { padding: 5px 5px; gap: 5px; margin-bottom: 3px; }
+      .tile-name { font-size: .7rem; }
+      .tile-cnt  { font-size: .7rem; min-width: 18px; }
+      .pip       { width: 8px; height: 8px; }
+
+      .ctrl-btn  { padding: 8px 14px; font-size: .8rem; }
+      #message-area { min-height: 26px; }
+      .msg       { font-size: .85rem; }
+      .win-msg   { font-size: 1.2rem; }
+
+      footer { font-size: .72rem; padding: 10px 12px; }
+      .kbd-row { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>ワタルート</h1>
+  <div id="turn-indicator"></div>
+</header>
+
+<div id="game-layout">
+  <!-- Player 1 panel -->
+  <div class="panel" id="panel-red">
+    <div class="panel-title">🔴 プレイヤー1</div>
+    <div class="panel-subtitle">← 左端から右端へつなぐ →</div>
+    <div id="inv-red"></div>
+  </div>
+
+  <!-- Board -->
+  <div id="board-area">
+    <div><canvas id="board-canvas"></canvas></div>
+    <div id="controls">
+      <button class="ctrl-btn" id="orient-btn">向き: 横 ↔ [R]</button>
+      <button class="ctrl-btn" id="undo-btn" disabled>元に戻す [Z]</button>
+      <button class="ctrl-btn" id="reset-btn">リセット</button>
+    </div>
+    <div id="message-area"><div id="message" class="msg"></div></div>
+  </div>
+
+  <!-- Player 2 panel -->
+  <div class="panel" id="panel-blue">
+    <div class="panel-title">🔵 プレイヤー2</div>
+    <div class="panel-subtitle">↑ 上端から下端へつなぐ ↓</div>
+    <div id="inv-blue"></div>
+  </div>
+</div>
+
+<footer>
+  <h3>ルール</h3>
+  <ul>
+    <li>交互にタイルを1枚ずつ置き、先に端から端までつなげた方の勝ち</li>
+    <li>タイルの辺と辺が接していると「つながっている」</li>
+    <li>相手のタイルの上には置けない。ボードの外に出るように置けない</li>
+    <li>自分のタイル同士の上に1段だけ重ねられる（橋）― 橋は薄い色+白点で表示</li>
+    <li>前のターンに置いたタイルに隣接している必要はない</li>
+  </ul>
+  <div class="kbd-row" style="margin-top:8px;">
+    <kbd>R</kbd> 向き切替 &nbsp;
+    <kbd>1</kbd> 小タイル(3) &nbsp;
+    <kbd>2</kbd> 中タイル(4) &nbsp;
+    <kbd>3</kbd> 大タイル(5)
+  </div>
+</footer>
+
+<script>
+// ================================================================
+//  CONSTANTS
+// ================================================================
+const BSIZE = 10;
+const SIZES = [3, 4, 5];
+const NAMES = { 3: '小 (3マス)', 4: '中 (4マス)', 5: '大 (5マス)' };
+
+// ================================================================
+//  CANVAS SETUP (responsive + HiDPI)
+// ================================================================
+const canvas = document.getElementById('board-canvas');
+const ctx    = canvas.getContext('2d');
+const DPR    = window.devicePixelRatio || 1;
+
+let CELL, PAD, CW, CH;
+
+function computeDims() {
+  // Available width: viewport minus body padding, capped at 568px
+  const vw  = window.innerWidth;
+  PAD  = vw < 600 ? 22 : 34;
+  const max = Math.min(vw - (vw < 600 ? 12 : 20), 568);
+  CELL = Math.floor((max - PAD * 2) / BSIZE);
+  CW   = PAD * 2 + BSIZE * CELL;
+  CH   = CW;
+
+  canvas.width        = CW * DPR;
+  canvas.height       = CH * DPR;
+  canvas.style.width  = CW + 'px';
+  canvas.style.height = CH + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+
+computeDims();
+
+// ================================================================
+//  PALETTE
+// ================================================================
+const P = {
+  redFill   : '#e74c3c',
+  redBridge : '#f1948a',
+  redEdge   : '#c0392b',
+  blueFill  : '#3498db',
+  blueBridge: '#85c1e9',
+  blueEdge  : '#2471a3',
+  empty     : '#1e2952',
+  grid      : '#131a35',
+  bg        : '#151a30',
+};
+
+// ================================================================
+//  STATE
+// ================================================================
+let board;           // [r][c] = { color:'red'|'blue'|null, level:0|1|2 }
+let cur;             // 'red' | 'blue'
+let gameOver;
+let selSize;         // 3 | 4 | 5
+let orient;          // 'h' | 'v'
+let hover;           // { r, c } | null
+let tileCount;       // { red:{3,4,5}, blue:{3,4,5} }
+let history  = [];   // undo stack
+let touchPending = null; // mobile: {r,c} of first tap, awaiting confirm tap
+
+function mkTiles() { return { 3: 30, 4: 1, 5: 1 }; }
+
+// ================================================================
+//  BOARD HELPERS
+// ================================================================
+function resetBoard() {
+  board = Array.from({ length: BSIZE }, () =>
+    Array.from({ length: BSIZE }, () => ({ color: null, level: 0 }))
+  );
+}
+
+function cellPx(r, c) {
+  return { x: PAD + c * CELL, y: PAD + r * CELL };
+}
+
+function pxCell(px, py) {
+  return { r: Math.floor((py - PAD) / CELL), c: Math.floor((px - PAD) / CELL) };
+}
+
+function tileCells(r, c, size, o) {
+  const cells = [];
+  for (let i = 0; i < size; i++) {
+    cells.push(o === 'h' ? [r, c + i] : [r + i, c]);
+  }
+  return cells;
+}
+
+function inBounds(r, c) {
+  return r >= 0 && r < BSIZE && c >= 0 && c < BSIZE;
+}
+
+// Returns 'place'|'bridge'|false
+function placementType(r, c, size, o, color) {
+  const cells = tileCells(r, c, size, o);
+  if (cells.some(([r, c]) => !inBounds(r, c))) return false;
+
+  const states = cells.map(([r, c]) => board[r][c]);
+
+  if (states.every(s => s.level === 0))                               return 'place';
+  if (states.every(s => s.color === color && s.level === 1))          return 'bridge';
+  return false;
+}
+
+function canPlace(r, c, size, o, color) {
+  return !!placementType(r, c, size, o, color);
+}
+
+function doPlace(r, c, size, o, color) {
+  const cells = tileCells(r, c, size, o);
+  const type  = placementType(r, c, size, o, color);
+  const lv    = type === 'bridge' ? 2 : 1;
+  // Record snapshot for undo
+  history.push({
+    color, size,
+    cells: cells.map(([r, c]) => ({ r, c, prevColor: board[r][c].color, prevLevel: board[r][c].level }))
+  });
+  for (const [r, c] of cells) {
+    board[r][c] = { color, level: lv };
+  }
+  tileCount[color][size]--;
+}
+
+function undoMove() {
+  if (history.length === 0) return;
+  const snap = history.pop();
+  for (const { r, c, prevColor, prevLevel } of snap.cells) {
+    board[r][c] = { color: prevColor, level: prevLevel };
+  }
+  tileCount[snap.color][snap.size]++;
+  cur          = snap.color;
+  selSize      = snap.size;
+  gameOver     = false;
+  touchPending = null;
+  document.getElementById('message').textContent = '';
+  draw();
+  updateUI();
+}
+
+// BFS win check
+function checkWin(color) {
+  const vis = new Set();
+  const q   = [];
+
+  if (color === 'red') {
+    // connect col 0 → col BSIZE-1
+    for (let r = 0; r < BSIZE; r++) {
+      if (board[r][0].color === 'red') {
+        const k = `${r},0`;
+        vis.add(k); q.push([r, 0]);
+      }
+    }
+    while (q.length) {
+      const [r, c] = q.shift();
+      if (c === BSIZE - 1) return true;
+      for (const [nr, nc] of [[r-1,c],[r+1,c],[r,c-1],[r,c+1]]) {
+        const k = `${nr},${nc}`;
+        if (inBounds(nr, nc) && !vis.has(k) && board[nr][nc].color === 'red') {
+          vis.add(k); q.push([nr, nc]);
+        }
+      }
+    }
+  } else {
+    // connect row 0 → row BSIZE-1
+    for (let c = 0; c < BSIZE; c++) {
+      if (board[0][c].color === 'blue') {
+        const k = `0,${c}`;
+        vis.add(k); q.push([0, c]);
+      }
+    }
+    while (q.length) {
+      const [r, c] = q.shift();
+      if (r === BSIZE - 1) return true;
+      for (const [nr, nc] of [[r-1,c],[r+1,c],[r,c-1],[r,c+1]]) {
+        const k = `${nr},${nc}`;
+        if (inBounds(nr, nc) && !vis.has(k) && board[nr][nc].color === 'blue') {
+          vis.add(k); q.push([nr, nc]);
+        }
+      }
+    }
+  }
+  return false;
+}
+
+// Check if any move exists for given player
+function hasAnyMove(color) {
+  for (const size of SIZES) {
+    if (tileCount[color][size] === 0) continue;
+    for (let r = 0; r < BSIZE; r++)
+      for (let c = 0; c < BSIZE; c++)
+        for (const o of ['h', 'v'])
+          if (canPlace(r, c, size, o, color)) return true;
+  }
+  return false;
+}
+
+// ================================================================
+//  DRAWING
+// ================================================================
+function draw() {
+  ctx.clearRect(0, 0, CW, CH);
+
+  // Background
+  ctx.fillStyle = P.bg;
+  ctx.fillRect(0, 0, CW, CH);
+
+  drawEdges();
+
+  for (let r = 0; r < BSIZE; r++)
+    for (let c = 0; c < BSIZE; c++)
+      drawCell(r, c);
+
+  if (hover && !gameOver) drawHover(hover.r, hover.c);
+}
+
+function drawEdges() {
+  const bx = PAD, by = PAD;
+  const bw = BSIZE * CELL, bh = BSIZE * CELL;
+  const gap = 5;
+
+  ctx.lineWidth = 4;
+  ctx.lineCap   = 'round';
+  ctx.setLineDash([]);
+
+  // Red — left & right
+  ctx.strokeStyle = P.redFill;
+  ctx.beginPath(); ctx.moveTo(bx - gap, by); ctx.lineTo(bx - gap, by + bh); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(bx + bw + gap, by); ctx.lineTo(bx + bw + gap, by + bh); ctx.stroke();
+
+  // Blue — top & bottom
+  ctx.strokeStyle = P.blueFill;
+  ctx.beginPath(); ctx.moveTo(bx, by - gap); ctx.lineTo(bx + bw, by - gap); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(bx, by + bh + gap); ctx.lineTo(bx + bw, by + bh + gap); ctx.stroke();
+
+  // Corner arrows
+  ctx.font = 'bold 11px sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+
+  ctx.fillStyle = P.redFill;
+  ctx.fillText('←→', PAD / 2, CW / 2);
+  ctx.fillText('←→', CW - PAD / 2, CW / 2);
+
+  ctx.fillStyle = P.blueFill;
+  ctx.fillText('↑↓', CW / 2, PAD / 2);
+  ctx.fillText('↑↓', CW / 2, CH - PAD / 2);
+}
+
+function drawCell(r, c) {
+  const { x, y } = cellPx(r, c);
+  const cell      = board[r][c];
+  const ins       = 3;
+
+  // Empty cell background
+  ctx.fillStyle = P.empty;
+  ctx.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
+
+  // Tile fill
+  if (cell.color) {
+    const bridge = cell.level === 2;
+    ctx.fillStyle = cell.color === 'red'
+      ? (bridge ? P.redBridge  : P.redFill)
+      : (bridge ? P.blueBridge : P.blueFill);
+    ctx.fillRect(x + ins, y + ins, CELL - ins * 2, CELL - ins * 2);
+
+    // Bridge dot
+    if (bridge) {
+      ctx.fillStyle = 'rgba(255,255,255,.65)';
+      ctx.beginPath();
+      ctx.arc(x + CELL / 2, y + CELL / 2, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Grid
+  ctx.strokeStyle = P.grid;
+  ctx.lineWidth   = 1;
+  ctx.strokeRect(x, y, CELL, CELL);
+}
+
+function drawHover(r, c) {
+  const type      = placementType(r, c, selSize, orient, cur);
+  const cells     = tileCells(r, c, selSize, orient);
+  const valid     = !!type && cells.every(([r, c]) => inBounds(r, c));
+  const isPending = !!(touchPending && touchPending.r === r && touchPending.c === c);
+
+  // ── 1. Cell fills ──────────────────────────────────────────────
+  for (const [hr, hc] of cells) {
+    if (!inBounds(hr, hc)) continue;
+    const { x, y } = cellPx(hr, hc);
+
+    if (valid) {
+      const alpha = isPending ? .92 : .72;
+      ctx.fillStyle = cur === 'red'
+        ? (type === 'bridge' ? `rgba(241,148,138,${alpha})` : `rgba(231,76,60,${alpha})`)
+        : (type === 'bridge' ? `rgba(133,193,233,${alpha})` : `rgba(52,152,219,${alpha})`);
+      ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+    } else {
+      ctx.fillStyle = 'rgba(255,50,50,.32)';
+      ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+      ctx.strokeStyle = 'rgba(255,90,90,.85)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + 9, y + 9);         ctx.lineTo(x + CELL - 9, y + CELL - 9);
+      ctx.moveTo(x + CELL - 9, y + 9);  ctx.lineTo(x + 9, y + CELL - 9);
+      ctx.stroke();
+    }
+  }
+
+  // ── 2. Outline around the whole tile ──────────────────────────
+  const ibCells = cells.filter(([r, c]) => inBounds(r, c));
+  if (ibCells.length > 0) {
+    ctx.lineWidth   = isPending ? 3.5 : 2.5;
+    ctx.strokeStyle = valid
+      ? (cur === 'red' ? 'rgba(231,76,60,1)' : 'rgba(52,152,219,1)')
+      : 'rgba(255,70,70,1)';
+    ctx.setLineDash(valid ? [] : [5, 3]);
+
+    if (orient === 'h') {
+      const minC = Math.min(...ibCells.map(([, c]) => c));
+      const maxC = Math.max(...ibCells.map(([, c]) => c));
+      const { x, y } = cellPx(r, minC);
+      ctx.strokeRect(x + 1.5, y + 1.5, (maxC - minC + 1) * CELL - 3, CELL - 3);
+    } else {
+      const minR = Math.min(...ibCells.map(([r]) => r));
+      const maxR = Math.max(...ibCells.map(([r]) => r));
+      const { x, y } = cellPx(minR, c);
+      ctx.strokeRect(x + 1.5, y + 1.5, CELL - 3, (maxR - minR + 1) * CELL - 3);
+    }
+    ctx.setLineDash([]);
+  }
+
+  // ── 3. Anchor cell highlight (where cursor/finger is) ─────────
+  if (inBounds(r, c)) {
+    const { x, y } = cellPx(r, c);
+    ctx.fillStyle = 'rgba(255,255,255,.20)';
+    ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+    if (!isPending) {
+      // Corner brackets to show anchor point
+      const b = Math.max(6, CELL * 0.18);
+      ctx.strokeStyle = 'rgba(255,255,255,.85)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y + 4 + b); ctx.lineTo(x + 4, y + 4); ctx.lineTo(x + 4 + b, y + 4);
+      ctx.moveTo(x + CELL - 4 - b, y + 4); ctx.lineTo(x + CELL - 4, y + 4); ctx.lineTo(x + CELL - 4, y + 4 + b);
+      ctx.stroke();
+    }
+  }
+
+  // ── 4. Centre label ────────────────────────────────────────────
+  const mid = cells[Math.floor(cells.length / 2)];
+  if (isPending && valid && inBounds(...mid)) {
+    // "✓" confirm indicator when first tap done
+    const { x, y } = cellPx(...mid);
+    ctx.font = `bold ${Math.max(12, Math.floor(CELL * 0.34))}px sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,1)';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('✓', x + CELL / 2, y + CELL / 2);
+  } else {
+    if (type === 'bridge' && valid && inBounds(...mid)) {
+      const { x, y } = cellPx(...mid);
+      ctx.font = `bold ${Math.max(9, Math.floor(CELL * 0.22))}px sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,.9)';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('橋', x + CELL / 2, y + CELL / 2);
+    }
+    if (!valid && cells.some(([r, c]) => !inBounds(r, c)) && inBounds(...mid)) {
+      const { x, y } = cellPx(...mid);
+      ctx.font = `bold ${Math.max(8, Math.floor(CELL * 0.20))}px sans-serif`;
+      ctx.fillStyle = 'rgba(255,160,100,.95)';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('枠外', x + CELL / 2, y + CELL / 2);
+    }
+  }
+}
+
+// ================================================================
+//  UI
+// ================================================================
+function updateUI() {
+  const ti = document.getElementById('turn-indicator');
+  if (!gameOver) {
+    ti.textContent = cur === 'red'
+      ? '🔴 プレイヤー1のターン'
+      : '🔵 プレイヤー2のターン';
+  }
+
+  document.getElementById('panel-red').className  =
+    'panel' + (cur === 'red'  && !gameOver ? ' active-red'  : '');
+  document.getElementById('panel-blue').className =
+    'panel' + (cur === 'blue' && !gameOver ? ' active-blue' : '');
+
+  const ob = document.getElementById('orient-btn');
+  ob.innerHTML = orient === 'h'
+    ? '向き: <b>横</b> ⇔ 縦 [R]'
+    : '向き: 横 ⇔ <b>縦</b> [R]';
+
+  document.getElementById('undo-btn').disabled = history.length === 0;
+  renderInv('red');
+  renderInv('blue');
+}
+
+function renderInv(color) {
+  const el       = document.getElementById(`inv-${color}`);
+  el.innerHTML   = '';
+  const isActive = !gameOver && cur === color;
+
+  for (const size of SIZES) {
+    const count = tileCount[color][size];
+    const btn   = document.createElement('div');
+    btn.className = 'tile-btn';
+
+    if (isActive && count > 0)         btn.classList.add('clickable');
+    if (count === 0)                   btn.classList.add('depleted');
+    if (isActive && selSize === size)  btn.classList.add('selected');
+
+    if (isActive && count > 0) {
+      btn.addEventListener('click', () => {
+        selSize = size;
+        touchPending = null;
+        updateUI();
+        draw();
+      });
+    }
+
+    // Mini pip preview
+    const pips = document.createElement('div');
+    pips.className = 'tile-pip-row';
+    for (let i = 0; i < size; i++) {
+      const p = document.createElement('div');
+      p.className = `pip pip-${color}`;
+      pips.appendChild(p);
+    }
+
+    const name = document.createElement('div');
+    name.className   = 'tile-name';
+    name.textContent = NAMES[size];
+
+    const cnt = document.createElement('div');
+    cnt.className   = 'tile-cnt';
+    cnt.textContent = `×${count}`;
+
+    btn.append(pips, name, cnt);
+    el.appendChild(btn);
+  }
+}
+
+function showMsg(text, isWin = false, color = null) {
+  const el     = document.getElementById('message');
+  el.className = isWin ? `win-msg win-${color}` : 'msg';
+  el.textContent = text;
+  if (!isWin) setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 2200);
+}
+
+// ================================================================
+//  GAME LOGIC
+// ================================================================
+function initGame() {
+  resetBoard();
+  cur      = 'red';
+  gameOver = false;
+  selSize  = 3;
+  orient   = 'h';
+  hover        = null;
+  tileCount    = { red: mkTiles(), blue: mkTiles() };
+  history      = [];
+  touchPending = null;
+
+  document.getElementById('message').textContent = '';
+  document.getElementById('turn-indicator').textContent = '🔴 プレイヤー1のターン';
+  updateUI();
+  draw();
+}
+
+function handleClick(r, c) {
+  if (gameOver || !inBounds(r, c)) return;
+
+  // Auto-switch to available size if current is depleted
+  if (tileCount[cur][selSize] === 0) {
+    const avail = SIZES.find(s => tileCount[cur][s] > 0);
+    if (!avail) { showMsg('タイルがありません'); return; }
+    selSize = avail;
+    updateUI();
+  }
+
+  if (!canPlace(r, c, selSize, orient, cur)) {
+    showMsg('そこには置けません');
+    return;
+  }
+
+  doPlace(r, c, selSize, orient, cur);
+
+  if (checkWin(cur)) {
+    gameOver = true;
+    const w = cur === 'red' ? '🔴 プレイヤー1' : '🔵 プレイヤー2';
+    document.getElementById('turn-indicator').textContent = 'ゲーム終了';
+    showMsg(`${w} の勝利！🎉`, true, cur);
+    draw();
+    updateUI();
+    return;
+  }
+
+  // Switch turn
+  cur = cur === 'red' ? 'blue' : 'red';
+
+  // If next player has no moves, current player wins
+  if (!hasAnyMove(cur)) {
+    gameOver = true;
+    const prev = cur === 'red' ? 'blue' : 'red';
+    const w    = prev === 'red' ? '🔴 プレイヤー1' : '🔵 プレイヤー2';
+    document.getElementById('turn-indicator').textContent = 'ゲーム終了';
+    showMsg(`${w} の勝利！（相手が置けません）🎉`, true, prev);
+    draw();
+    updateUI();
+    return;
+  }
+
+  // Auto-select available tile for next player
+  if (tileCount[cur][selSize] === 0) {
+    selSize = SIZES.find(s => tileCount[cur][s] > 0) || selSize;
+  }
+
+  draw();
+  updateUI();
+}
+
+// ================================================================
+//  EVENT HELPERS
+// ================================================================
+function evPos(e) {
+  const rect  = canvas.getBoundingClientRect();
+  const scaleX = CW / rect.width;
+  const scaleY = CH / rect.height;
+  const src    = e.touches ? e.touches[0] : e;
+  return {
+    px: (src.clientX - rect.left) * scaleX,
+    py: (src.clientY - rect.top)  * scaleY,
+  };
+}
+
+// ================================================================
+//  EVENTS
+// ================================================================
+canvas.addEventListener('mousemove', e => {
+  if (gameOver) return;
+  const { px, py } = evPos(e);
+  hover = pxCell(px, py);
+  draw();
+});
+
+canvas.addEventListener('mouseleave', () => { hover = null; draw(); });
+
+canvas.addEventListener('click', e => {
+  const { px, py } = evPos(e);
+  const { r, c }   = pxCell(px, py);
+  handleClick(r, c);
+});
+
+// Touch — two-tap system: 1st tap shows preview, 2nd tap on same cell confirms
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (gameOver) return;
+  const { px, py } = evPos(e);
+  hover = pxCell(px, py);
+  draw();
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (gameOver || !hover) { hover = null; touchPending = null; draw(); return; }
+  const { r, c } = hover;
+
+  if (!inBounds(r, c)) {
+    touchPending = null; hover = null; draw(); return;
+  }
+
+  if (touchPending && touchPending.r === r && touchPending.c === c) {
+    // ── 2nd tap on same cell → confirm placement ──────────────
+    touchPending = null;
+    handleClick(r, c);
+    hover = null;
+  } else {
+    // ── 1st tap → lock preview and wait for confirm ───────────
+    if (canPlace(r, c, selSize, orient, cur)) {
+      touchPending = { r, c };
+      // Show hint in message area
+      const msgEl = document.getElementById('message');
+      if (!msgEl.className.includes('win')) {
+        msgEl.textContent = 'もう一度タップで確定';
+        msgEl.className = 'msg';
+      }
+    } else {
+      touchPending = null; // invalid cell — just show X preview
+    }
+  }
+  draw();
+}, { passive: false });
+
+document.getElementById('orient-btn').addEventListener('click', () => {
+  orient = orient === 'h' ? 'v' : 'h';
+  touchPending = null;
+  updateUI(); draw();
+});
+
+document.getElementById('undo-btn').addEventListener('click', undoMove);
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  if (confirm('ゲームをリセットしますか？')) initGame();
+});
+
+document.addEventListener('keydown', e => {
+  switch (e.key.toLowerCase()) {
+    case 'z': undoMove(); break;
+  }
+  if (gameOver) return;
+  switch (e.key.toLowerCase()) {
+    case 'r':
+      orient = orient === 'h' ? 'v' : 'h';
+      updateUI(); draw(); break;
+    case '1':
+      if (tileCount[cur][3] > 0) { selSize = 3; updateUI(); draw(); } break;
+    case '2':
+      if (tileCount[cur][4] > 0) { selSize = 4; updateUI(); draw(); } break;
+    case '3':
+      if (tileCount[cur][5] > 0) { selSize = 5; updateUI(); draw(); } break;
+  }
+});
+
+// ================================================================
+//  START
+// ================================================================
+initGame();
+
+// Recompute canvas on window resize (e.g. device rotation)
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { computeDims(); draw(); }, 120);
+});
+</script>
+</body>
+</html>
